@@ -1,31 +1,41 @@
 import yt_dlp
 
-# Ask for video URL
-url = input("Enter The URL of Video: ")
+# Predefined resolutions we want to allow
+allowed_res = ["144p", "240p", "360p", "480p", "720p", "1080p", "1080p60"]
 
-# First get available formats
-ydl_opts = {}
+url = input("Enter the YouTube URL: ")
+
+# Extract video info without downloading
+ydl_opts = {"quiet": True}
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    info_dict = ydl.extract_info(url, download=False)  # Fetch info only
-    formats = info_dict.get('formats', [])
+    info_dict = ydl.extract_info(url, download=False)
+    formats = info_dict.get("formats", [])
 
-    print("\nAvailable Qualities:\n")
-    format_list = []
-    for i, f in enumerate(formats):
-        # Filter only formats with resolution
-        if f.get("height"):
-            print(f"{i}. {f['format_id']} - {f['ext']} - {f['height']}p - {f.get('fps','')}fps - {f.get('filesize', 'N/A')}")
-            format_list.append(f)
+# Filter only allowed resolutions
+filtered_formats = []
+for f in formats:
+    if f.get("format_note") in allowed_res and f.get("ext") == "mp4":
+        filtered_formats.append(f)
 
-    choice = int(input("\nEnter the number of the quality you want to download: "))
-    selected_format = format_list[choice]['format_id']
+# Remove duplicates (same resolution appearing multiple times)
+unique_formats = {f["format_note"]: f for f in filtered_formats}
+filtered_formats = list(unique_formats.values())
 
-# Now download with selected quality
+# Display available choices
+print("\nAvailable Qualities:")
+for idx, f in enumerate(filtered_formats, 1):
+    print(f"{idx}. {f['format_note']} - {f['ext']} - {round(f['filesize'] / (1024*1024), 2) if f.get('filesize') else 'Unknown'} MB")
+
+# Ask user for choice
+choice = int(input("\nEnter choice number: "))
+selected_format = filtered_formats[choice - 1]["format_id"]
+
+# Download selected format
 download_opts = {
-    'format': selected_format,
-    'outtmpl': '%(title)s.%(ext)s',  # Save as video title
+    "format": selected_format,
+    "outtmpl": "%(title)s.%(ext)s",
 }
-
 with yt_dlp.YoutubeDL(download_opts) as ydl:
-    result = ydl.download([url])
-    print("\n✅ Video downloaded successfully!")
+    ydl.download([url])
+
+print("\n✅ Download Completed!")
