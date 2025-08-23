@@ -1,8 +1,11 @@
-from pytube import YouTube
+import yt_dlp
 
-link = input("Enter The URL of Video: ")
-video = YouTube(link)
-stream = video.streams.get_highest_resolution()
-stream.download()
-print("✅ Download complete!")
+url = input("Enter The URL of Video: ")
 
+ydl_opts = {
+    'format': 'best',
+    'outtmpl': '%(title)s.%(ext)s',  # Save as video title
+}
+
+with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    ydl.download([url])
