@@ -9,8 +9,6 @@ import re
 
 # Folder for all downloads
 DOWNLOAD_FOLDER = "Downloads"
-
-# Ensure the folder exists
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def sanitize_filename(name):
@@ -68,6 +66,16 @@ def download_video_audio(yt):
     os.remove(video_file)
     os.remove(audio_file)
 
+def download_audio_only(yt):
+    """Download audio only and convert to mp3."""
+    print(f"\nDownloading audio only: {yt.title}")
+    audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
+    out_file = audio_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_audio.mp3")
+    base, ext = os.path.splitext(out_file)
+    new_file = os.path.join(DOWNLOAD_FOLDER, sanitize_filename(yt.title) + ".mp3")
+    os.rename(out_file, new_file)
+    print(f"✅ Audio download complete: {new_file}")
+
 def main():
     url = input("Enter YouTube URL: ").strip()
     if not url:
@@ -81,7 +89,17 @@ def main():
         return
 
     print(f"\nTitle: {yt.title}")
-    download_video_audio(yt)
+    print("\nChoose download option:")
+    print("1 - Video (choose resolution, merge audio if needed)")
+    print("2 - Audio only (mp3, music)")
+
+    choice = input("Enter choice (1 or 2): ").strip()
+    if choice == '1':
+        download_video_audio(yt)
+    elif choice == '2':
+        download_audio_only(yt)
+    else:
+        print("❌ Invalid choice. Exiting.")
 
 if __name__ == "__main__":
     main()
