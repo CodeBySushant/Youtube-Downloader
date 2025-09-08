@@ -7,6 +7,12 @@ import os
 import subprocess
 import re
 
+# Folder for all downloads
+DOWNLOAD_FOLDER = "Downloads"
+
+# Ensure the folder exists
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
 def sanitize_filename(name):
     """Replace invalid Windows filename characters with underscore."""
     return re.sub(r'[\\/*?:"<>|]', '_', name)
@@ -28,26 +34,25 @@ def download_video_audio(yt):
     if choice.isdigit() and 1 <= int(choice) <= len(streams):
         video_stream = streams[int(choice)-1]
     else:
-        # Choose highest resolution by default
-        video_stream = streams[0]
+        video_stream = streams[0]  # highest resolution by default
 
-    # Check if stream is progressive (has audio)
+    # If progressive (video+audio)
     if video_stream.is_progressive:
         print(f"\nDownloading video+audio: {video_stream.resolution}")
-        video_file = video_stream.download(filename=sanitize_filename(yt.title) + ".mp4")
+        video_file = video_stream.download(output_path=DOWNLOAD_FOLDER, filename=sanitize_filename(yt.title) + ".mp4")
         print(f"✅ Download complete: {video_file}")
         return
 
-    # If video-only, download video and merge with highest quality audio
+    # Video-only, need to merge with audio
     print(f"\nDownloading video-only stream: {video_stream.resolution}")
-    video_file = video_stream.download(filename="temp_video.mp4")
+    video_file = video_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_video.mp4")
     
-    # Download highest quality audio
+    # Highest quality audio
     audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
-    audio_file = audio_stream.download(filename="temp_audio.mp3")
+    audio_file = audio_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_audio.mp3")
 
-    # Merge using ffmpeg
-    output_file = sanitize_filename(yt.title) + ".mp4"
+    # Merge with ffmpeg
+    output_file = os.path.join(DOWNLOAD_FOLDER, sanitize_filename(yt.title) + ".mp4")
     print("\nMerging video and audio with ffmpeg...")
     try:
         subprocess.run(
