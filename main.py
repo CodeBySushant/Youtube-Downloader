@@ -1,41 +1,66 @@
-import yt_dlp
+# Install pytubefix if not already installed
+# !pip install pytubefix
 
-# Predefined resolutions we want to allow
-allowed_res = ["144p", "240p", "360p", "480p", "720p", "1080p", "1080p60"]
+from pytubefix import YouTube
+from pytubefix.cli import on_progress
+import os
+import subprocess
+import re
 
-url = input("Enter the YouTube URL: ")
+def sanitize_filename(name):
+    """Replace invalid Windows filename characters with underscore."""
+    return re.sub(r'[\\/*?:"<>|]', '_', name)
 
-# Extract video info without downloading
-ydl_opts = {"quiet": True}
-with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    info_dict = ydl.extract_info(url, download=False)
-    formats = info_dict.get("formats", [])
+def download_highest_quality_video_audio(yt):
+    """Download highest quality video and audio, then merge using ffmpeg."""
+    print(f"\nDownloading highest quality video and audio for: {yt.title}")
 
-# Filter only allowed resolutions
-filtered_formats = []
-for f in formats:
-    if f.get("format_note") in allowed_res and f.get("ext") == "mp4":
-        filtered_formats.append(f)
+    # Get highest video-only stream
+    video_stream = yt.streams.filter(only_video=True, file_extension='mp4').order_by('resolution').desc().first()
+    # Get highest audio-only stream
+    audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
 
-# Remove duplicates (same resolution appearing multiple times)
-unique_formats = {f["format_note"]: f for f in filtered_formats}
-filtered_formats = list(unique_formats.values())
+    # Download video
+    video_file = video_stream.download(filename="temp_video.mp4")
+    # Download audio
+    audio_file = audio_stream.download(filename="temp_audio.mp3")
 
-# Display available choices
-print("\nAvailable Qualities:")
-for idx, f in enumerate(filtered_formats, 1):
-    print(f"{idx}. {f['format_note']} - {f['ext']} - {round(f['filesize'] / (1024*1024), 2) if f.get('filesize') else 'Unknown'} MB")
+    # Sanitize output filename
+    output_file = sanitize_filename(yt.title) + ".mp4"
+    video_file_escaped = f'"{video_file}"'
+    audio_file_escaped = f'"{audio_file}"'
+    output_file_escaped = f'"{output_file}"'
 
-# Ask user for choice
-choice = int(input("\nEnter choice number: "))
-selected_format = filtered_formats[choice - 1]["format_id"]
+    print("\nMerging video and audio with ffmpeg...")
+    try:
+        subprocess.run(
+            f'ffmpeg -y -i {video_file_escaped} -i {audio_file_escaped} -c:v copy -c:a aac {output_file_escaped}',
+            shell=True,
+            check=True
+        )
+        print(f"✅ Download complete: {output_file}")
+    except Exception as e:
+        print(f"❌ Error during merging: {e}")
 
-# Download selected format
-download_opts = {
-    "format": selected_format,
-    "outtmpl": "%(title)s.%(ext)s",
-}
-with yt_dlp.YoutubeDL(download_opts) as ydl:
-    ydl.download([url])
+    # Clean up temporary files
+    os.remove(video_file)
+    os.remove(audio_file)
 
-print("\n✅ Download Completed!")
+def main():
+    url = input("Enter YouTube URL: ").strip()
+    if not url:
+        print("❌ URL cannot be empty.")
+        return
+
+    try:
+        yt = YouTube(url, on_progress_callback=on_progress)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return
+
+    print(f"\nTitle: {yt.title}")
+    print("Downloading **highest quality** video and audio...")
+    download_highest_quality_video_audio(yt)
+
+if __name__ == "__main__":
+    main()
