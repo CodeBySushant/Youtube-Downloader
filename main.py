@@ -11,30 +11,47 @@ def sanitize_filename(name):
     """Replace invalid Windows filename characters with underscore."""
     return re.sub(r'[\\/*?:"<>|]', '_', name)
 
-def download_highest_quality_video_audio(yt):
-    """Download highest quality video and audio, then merge using ffmpeg."""
-    print(f"\nDownloading highest quality video and audio for: {yt.title}")
+def list_video_streams(yt):
+    """List all available video streams with resolution and type."""
+    streams = yt.streams.filter(file_extension='mp4').order_by('resolution').desc()
+    print("\nAvailable video streams:")
+    for i, stream in enumerate(streams, start=1):
+        type_info = "Video+Audio" if stream.is_progressive else "Video-only"
+        print(f"{i}. Resolution: {stream.resolution or 'N/A'}, FPS: {stream.fps or 'N/A'}, Type: {type_info}")
+    return streams
 
-    # Get highest video-only stream
-    video_stream = yt.streams.filter(only_video=True, file_extension='mp4').order_by('resolution').desc().first()
-    # Get highest audio-only stream
-    audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
+def download_video_audio(yt):
+    """Download selected video and highest quality audio, then merge."""
+    streams = list_video_streams(yt)
+    choice = input("\nEnter the number of the resolution to download (or press Enter for highest): ").strip()
+    
+    if choice.isdigit() and 1 <= int(choice) <= len(streams):
+        video_stream = streams[int(choice)-1]
+    else:
+        # Choose highest resolution by default
+        video_stream = streams[0]
 
-    # Download video
+    # Check if stream is progressive (has audio)
+    if video_stream.is_progressive:
+        print(f"\nDownloading video+audio: {video_stream.resolution}")
+        video_file = video_stream.download(filename=sanitize_filename(yt.title) + ".mp4")
+        print(f"✅ Download complete: {video_file}")
+        return
+
+    # If video-only, download video and merge with highest quality audio
+    print(f"\nDownloading video-only stream: {video_stream.resolution}")
     video_file = video_stream.download(filename="temp_video.mp4")
-    # Download audio
+    
+    # Download highest quality audio
+    audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
     audio_file = audio_stream.download(filename="temp_audio.mp3")
 
-    # Sanitize output filename
+    # Merge using ffmpeg
     output_file = sanitize_filename(yt.title) + ".mp4"
-    video_file_escaped = f'"{video_file}"'
-    audio_file_escaped = f'"{audio_file}"'
-    output_file_escaped = f'"{output_file}"'
-
     print("\nMerging video and audio with ffmpeg...")
     try:
         subprocess.run(
-            f'ffmpeg -y -i {video_file_escaped} -i {audio_file_escaped} -c:v copy -c:a aac {output_file_escaped}',
+            f'ffmpeg -y -i "{video_file}" -i "{audio_file}" -c:v copy -c:a aac "{output_file}"',
             shell=True,
             check=True
         )
@@ -42,7 +59,7 @@ def download_highest_quality_video_audio(yt):
     except Exception as e:
         print(f"❌ Error during merging: {e}")
 
-    # Clean up temporary files
+    # Clean up temp files
     os.remove(video_file)
     os.remove(audio_file)
 
@@ -59,8 +76,7 @@ def main():
         return
 
     print(f"\nTitle: {yt.title}")
-    print("Downloading **highest quality** video and audio...")
-    download_highest_quality_video_audio(yt)
+    download_video_audio(yt)
 
 if __name__ == "__main__":
     main()
