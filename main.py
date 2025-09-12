@@ -1,11 +1,9 @@
-# Install pytubefix if not already installed
-# !pip install pytubefix
-
 from pytubefix import YouTube
 from pytubefix.cli import on_progress
 import os
 import subprocess
 import re
+import uuid
 
 # Folder for all downloads
 DOWNLOAD_FOLDER = "Downloads"
@@ -25,7 +23,7 @@ def list_video_streams(yt):
     return streams
 
 def download_video_audio(yt):
-    """Download selected video and highest quality audio, then merge."""
+    """Download selected video and highest quality audio, then merge without overwriting."""
     streams = list_video_streams(yt)
     choice = input("\nEnter the number of the resolution to download (or press Enter for highest): ").strip()
     
@@ -34,23 +32,34 @@ def download_video_audio(yt):
     else:
         video_stream = streams[0]  # highest resolution by default
 
-    # If progressive (video+audio)
+    unique_id = uuid.uuid4().hex  # Generate unique ID
+
     if video_stream.is_progressive:
         print(f"\nDownloading video+audio: {video_stream.resolution}")
-        video_file = video_stream.download(output_path=DOWNLOAD_FOLDER, filename=sanitize_filename(yt.title) + ".mp4")
+        video_file = video_stream.download(
+            output_path=DOWNLOAD_FOLDER,
+            filename=sanitize_filename(yt.title) + f"_{unique_id}.mp4"
+        )
         print(f"✅ Download complete: {video_file}")
         return
 
-    # Video-only, need to merge with audio
     print(f"\nDownloading video-only stream: {video_stream.resolution}")
-    video_file = video_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_video.mp4")
+    video_file = video_stream.download(
+        output_path=DOWNLOAD_FOLDER,
+        filename=f"temp_video_{unique_id}.mp4"
+    )
     
-    # Highest quality audio
     audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
-    audio_file = audio_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_audio.mp3")
+    audio_file = audio_stream.download(
+        output_path=DOWNLOAD_FOLDER,
+        filename=f"temp_audio_{unique_id}.mp3"
+    )
 
-    # Merge with ffmpeg
-    output_file = os.path.join(DOWNLOAD_FOLDER, sanitize_filename(yt.title) + ".mp4")
+    output_file = os.path.join(
+        DOWNLOAD_FOLDER,
+        sanitize_filename(yt.title) + f"_{unique_id}.mp4"
+    )
+
     print("\nMerging video and audio with ffmpeg...")
     try:
         subprocess.run(
@@ -62,18 +71,28 @@ def download_video_audio(yt):
     except Exception as e:
         print(f"❌ Error during merging: {e}")
 
-    # Clean up temp files
     os.remove(video_file)
     os.remove(audio_file)
 
 def download_audio_only(yt):
-    """Download audio only and convert to mp3."""
+    """Download audio only and convert to mp3 without overwriting previous downloads."""
     print(f"\nDownloading audio only: {yt.title}")
+
+    unique_id = uuid.uuid4().hex  # Generate unique ID
+
     audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
-    out_file = audio_stream.download(output_path=DOWNLOAD_FOLDER, filename="temp_audio.mp3")
-    base, ext = os.path.splitext(out_file)
-    new_file = os.path.join(DOWNLOAD_FOLDER, sanitize_filename(yt.title) + ".mp3")
+    temp_audio_filename = f"temp_audio_{unique_id}.mp3"
+    out_file = audio_stream.download(
+        output_path=DOWNLOAD_FOLDER,
+        filename=temp_audio_filename
+    )
+    
+    new_file = os.path.join(
+        DOWNLOAD_FOLDER,
+        sanitize_filename(yt.title) + f"_{unique_id}.mp3"
+    )
     os.rename(out_file, new_file)
+
     print(f"✅ Audio download complete: {new_file}")
 
 def main():
